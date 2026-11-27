@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="按试卷练习数据结构与算法期末真题，保存你的练习进度。">
+  <meta name="theme-color" content="#163f36">
+  <title>DSA 期末刷题</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script>window.DSA_PAPERS = [];</script>
+  <script src="data-recent.js" defer></script>
+  <script src="data-middle.js" defer></script>
+  <script src="data-old.js" defer></script>
+  <script src="data-extra.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a href="index.html" class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>数算练习册</a>
+      <span class="save-status" id="save-status"><span aria-hidden="true"></span>进度保存在此浏览器</span>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="intro" aria-labelledby="page-title">
+      <div class="intro-copy">
+        <h1 id="page-title">DSA 期末刷题</h1>
+        <p id="bank-size">历年期末笔试真题</p>
+      </div>
+      <div class="progress-box">
+        <div class="progress-heading"><label for="progress">全题库进度</label><strong id="progress-text">0 / 0</strong></div>
+        <progress id="progress" max="1" value="0"></progress>
+        <p id="progress-detail"></p>
+      </div>
+    </section>
+    <div class="layout">
+      <aside class="sidebar">
+        <details id="paper-panel" open>
+          <summary>试卷 <span id="paper-selection"></span></summary>
+          <nav id="paper-list" aria-label="试卷"></nav>
+        </details>
+      </aside>
+      <section class="workspace" aria-label="练习区">
+        <div class="toolbar">
+          <div class="filters" role="group" aria-label="做题状态">
+            <button type="button" data-filter="all" aria-pressed="true">全部</button>
+            <button type="button" data-filter="todo" aria-pressed="false">待完成</button>
+            <button type="button" data-filter="wrong" aria-pressed="false">待订正</button>
+            <button type="button" data-filter="done" aria-pressed="false">已完成</button>
+          </div>
+          <div class="browse">
+            <button type="button" class="text-button" id="toggle-index" aria-expanded="false" aria-controls="question-index">题目列表 <span aria-hidden="true">▤</span></button>
+          </div>
+        </div>
+        <div id="question-index" class="question-index" hidden></div>
+        <article class="question" id="question">
+          <div class="question-body"><p>正在载入题库…</p></div>
+        </article>
+        <nav class="question-nav" aria-label="题目翻页">
+          <button type="button" class="secondary" id="previous"><span aria-hidden="true">←</span> 上一题</button>
+          <span id="position"></span>
+          <button type="button" class="secondary" id="next">下一题 <span aria-hidden="true">→</span></button>
+        </nav>
+        <p id="announcement" class="sr-only" aria-live="polite"></p>
+      </section>
+    </div>
+    <noscript>开启 JavaScript 后即可练习和保存进度。</noscript>
+  </main>
+</body>
+</html>
