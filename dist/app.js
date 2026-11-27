@@ -1,16 +1,27 @@
 "use strict";
 
-const papers = [...window.DSA_PAPERS].sort((a, b) =>
+const examPapers = window.DSA_PAPERS.filter(paper => paper.kind !== "homework").sort((a, b) =>
   b.id.slice(0, 4).localeCompare(a.id.slice(0, 4)) || a.id.localeCompare(b.id)
 );
+const homeworkPapers = window.DSA_PAPERS.filter(paper => paper.kind === "homework").sort((a, b) => a.id.localeCompare(b.id));
+const papers = [...examPapers, ...homeworkPapers];
+const sourceScopes = new Map([["all", "全部题目"], ["exams", "期末真题"], ["homework", "书面作业"]]);
+const sourceSelectLabels = new Map([["all", "全部试卷和章节"], ["exams", "全部试卷"], ["homework", "全部作业章节"]]);
+const papersById = new Map(papers.map(paper => [paper.id, paper]));
+const topicGroups = window.DSA_TOPIC_GROUPS;
+const topicNames = new Map(topicGroups.flatMap(group => group.topics));
+const topicSets = new Map([...topicNames.keys()].map(id => [id, new Set([id])]));
+for (const group of topicGroups) topicSets.set(`group:${group.id}`, new Set(group.topics.map(([id]) => id)));
+
 const questions = papers.flatMap(paper => paper.questions.map(question => ({
   ...question,
   id: `${paper.id}/${question.ref}`,
+  topics: question.topics ?? window.DSA_EXAM_TOPICS[paper.id]?.[question.ref] ?? [],
   paper,
 })));
 const byId = new Map(questions.map(question => [question.id, question]));
 const storageKey = "dsa-final-practice-v1";
-const defaultState = { paper: "all", filter: "all", questionId: "", records: {} };
+const defaultState = { paper: "all", topic: "all", filter: "all", questionId: "", records: {} };
 const filterNames = { all: "全部", todo: "待完成", wrong: "待订正", done: "已完成" };
 const statusNames = { new: "未作答", draft: "答题中", wrong: "待订正", done: "已完成" };
 const get = id => document.getElementById(id);
@@ -23,12 +34,15 @@ let feedback = null;
 let referenceOpen = false;
 
 if (!(state.filter in filterNames)) state.filter = "all";
-if (!papers.some(paper => paper.id === state.paper)) state.paper = "all";
+if (!sourceScopes.has(state.paper) && !papersById.has(state.paper)) state.paper = "all";
+if (!topicSets.has(state.topic)) state.topic = "all";
 if (!matchingQuestions().some(question => question.id === activeId)) {
   activeId = matchingQuestions()[0]?.id ?? "";
 }
-get("bank-size").textContent = `${papers.length} 套期末卷 · ${questions.length} 道练习题`;
+get("bank-size").textContent = `${examPapers.length} 套期末卷 · ${homeworkPapers.length} 组书面作业 · ${questions.length} 道练习题`;
 if (matchMedia("(max-width: 620px)").matches) get("paper-panel").open = false;
+setupSourceFilters();
+setupTopicFilter();
 render();
 
 function readState(reportError = true) {
@@ -59,9 +73,10 @@ function persist(change) {
 }
 
 function persistView(recordsChange = () => {}) {
-  const { paper, filter } = state;
+  const { paper, topic, filter } = state;
   persist(saved => {
     saved.paper = paper;
+    saved.topic = topic;
     saved.filter = filter;
     saved.questionId = pendingNextId ?? activeId;
     recordsChange(saved.records);
@@ -81,9 +96,18 @@ function saveAnswer(question, values, outcome) {
   });
 }
 
+function inPaperScope(question, scope) {
+  if (scope === "all") return true;
+  if (scope === "exams") return question.paper.kind !== "homework";
+  if (scope === "homework") return question.paper.kind === "homework";
+  return question.paper.id === scope;
+}
+
 function matchingQuestions() {
+  const topicSet = topicSets.get(state.topic);
   return questions.filter(question => {
-    if (state.paper !== "all" && question.paper.id !== state.paper) return false;
+    if (!inPaperScope(question, state.paper)) return false;
+    if (topicSet && !question.topics.some(topic => topicSet.has(topic))) return false;
     const status = state.records[question.id]?.status;
     if (state.filter === "todo") return status !== "done";
     if (state.filter === "wrong") return status === "wrong";
@@ -123,37 +147,98 @@ function renderProgress() {
   get("progress-detail").textContent = `已开始 ${started} 题 · 完成 ${questions.length ? Math.floor(100 * done / questions.length) : 0}%`;
 }
 
-function renderPapers() {
-  const nav = get("paper-list");
-  nav.replaceChildren();
-  const scopes = [{ id: "all", label: "全部往年卷", questions }, ...papers];
-  get("paper-selection").textContent = scopes.find(paper => paper.id === state.paper)?.label ?? "全部往年卷";
+function option(id, copy) {
+  const item = element("option", "", copy);
+  item.value = id;
+  return item;
+}
 
-  for (const paper of scopes) {
-    const count = paper.id === "all" ? questions.length : paper.questions.length;
-    const done = questions.filter(question =>
-      (paper.id === "all" || question.paper.id === paper.id) && state.records[question.id]?.status === "done"
-    ).length;
+function optionGroup(label, options) {
+  const group = element("optgroup");
+  group.label = label;
+  group.append(...options);
+  return group;
+}
+
+function sourceGroup() {
+  const source = papersById.get(state.paper);
+  return source ? (source.kind === "homework" ? "homework" : "exams") : state.paper;
+}
+
+function setupSourceFilters() {
+  const scopes = get("source-scopes");
+  for (const [id, label] of sourceScopes) {
     const item = button("", "paper", () => {
-      state.paper = paper.id;
-      clearIndexSearch();
-      selectQuestion(matchingQuestions()[0]?.id);
-      if (matchMedia("(max-width: 620px)").matches) get("paper-panel").open = false;
+      state.paper = id;
+      applyFilters();
     });
-    item.setAttribute("aria-pressed", String(state.paper === paper.id));
-    item.title = paper.details ?? paper.label;
-    item.append(element("span", "paper-label", paper.label), element("span", "paper-count", `${done}/${count}`));
-    nav.append(item);
+    item.dataset.scope = id;
+    item.append(element("span", "paper-label", label), element("span", "paper-count"));
+    scopes.append(item);
   }
+  const sourceSelect = get("source-select");
+  sourceSelect.append(option("", "全部试卷和章节"));
+  for (const [label, list] of [
+    ["期末真题", examPapers],
+    ["书面作业", homeworkPapers.filter(paper => !paper.archive)],
+    ["2022 秋书面作业", homeworkPapers.filter(paper => paper.archive)],
+  ]) {
+    if (list.length) sourceSelect.append(optionGroup(label, list.map(paper => option(paper.id, paper.label))));
+  }
+  sourceSelect.addEventListener("change", () => {
+    state.paper = sourceSelect.value || sourceGroup();
+    applyFilters();
+    if (sourceSelect.value && matchMedia("(max-width: 620px)").matches) get("paper-panel").open = false;
+  });
+}
+
+function renderSourceFilters() {
+  const source = papersById.get(state.paper);
+  const scope = sourceGroup();
+  get("paper-selection").textContent = source?.label ?? sourceScopes.get(scope);
+  const select = get("source-select");
+  select.options[0].textContent = sourceSelectLabels.get(scope);
+  select.value = source?.id ?? "";
+  for (const item of get("source-scopes").children) {
+    const id = item.dataset.scope;
+    const scoped = questions.filter(question => inPaperScope(question, id));
+    const done = scoped.filter(question => state.records[question.id]?.status === "done").length;
+    item.setAttribute("aria-pressed", String(id === scope));
+    item.querySelector(".paper-count").textContent = `${done}/${scoped.length}`;
+  }
+}
+
+function setupTopicFilter() {
+  const select = get("topic-select");
+  select.append(option("all", "全部知识点"));
+  for (const group of topicGroups) {
+    select.append(optionGroup(group.label, [
+      option(`group:${group.id}`, `全部${group.label}`),
+      ...group.topics.map(([id, label]) => option(id, label)),
+    ]));
+  }
+  select.addEventListener("change", () => {
+    state.topic = select.value;
+    applyFilters();
+  });
+}
+
+function applyFilters() {
+  clearIndexSearch();
+  const matching = matchingQuestions();
+  const current = matching.find(question => question.id === activeId);
+  selectQuestion(current?.id ?? matching[0]?.id);
 }
 
 function render() {
   renderProgress();
-  renderPapers();
+  renderSourceFilters();
+  get("topic-select").value = state.topic;
   for (const filter of document.querySelectorAll("[data-filter]")) {
     filter.setAttribute("aria-pressed", String(filter.dataset.filter === state.filter));
   }
   const matching = matchingQuestions();
+  get("match-count").textContent = `${matching.length} 道匹配`;
   const current = byId.get(activeId);
   renderQuestion(current);
   renderNavigation(matching);
@@ -194,7 +279,7 @@ function renderQuestion(question) {
   if (!question) {
     body.append(element("h2", "", questions.length ? "当前筛选下没有题目" : "题库未能载入"));
     if (questions.length) {
-      body.append(element("p", "empty", "可以切换试卷或做题状态继续练习。"));
+      body.append(element("p", "empty", "可以调整来源、知识点或做题状态继续练习。"));
     }
     if (feedback) body.append(element("p", `feedback ${feedback.type}`, feedback.text));
     return;
@@ -205,20 +290,45 @@ function renderQuestion(question) {
     : question.answers ? "填空题" : "开放题 · 自评";
   const meta = element("div", "question-meta");
   const metadata = element("div", "metadata");
-  const origin = element("span", "source", `${question.paper.label} · ${question.ref}`);
+  const homework = question.paper.kind === "homework";
+  const origin = element("span", "source", `${homework ? "书面作业 · " : ""}${question.paper.label} · ${question.ref}`);
   if (question.paper.details) origin.title = question.paper.details;
   metadata.append(origin, element("span", "type", type));
   const status = state.records[question.id]?.status;
   if (status === "done") metadata.append(element("span", "type", "已完成"));
   const links = element("div", "source-links");
   const source = question.source ?? question.paper.source;
-  if (source) links.append(link(question.page ? `原卷第 ${question.page} 页 ↗` : "查看原卷 ↗", source, question.page));
+  if (source) {
+    const name = homework ? "作业" : "原卷";
+    const sourceLink = link(question.page ? `${name}第 ${question.page} 页 ↗` : `查看${name} ↗`, source, question.page);
+    if (homework) sourceLink.title = "作业 PDF 内可能附有解答";
+    links.append(sourceLink);
+  } else if (question.paper.sourceName) {
+    links.append(element("span", "source-file", `${question.paper.sourceName} · 第 ${question.page} 页`));
+  }
   meta.append(metadata, links);
 
   const title = element("h2", "", question.title);
   title.id = "question-title";
   title.tabIndex = -1;
-  body.append(meta, title, element("p", "prompt", question.prompt));
+  body.append(meta, title);
+  if (question.topics.length) {
+    const tags = element("div", "topic-tags");
+    tags.setAttribute("aria-label", "本题知识点");
+    tags.setAttribute("role", "group");
+    for (const topic of question.topics) {
+      const tag = button(topicNames.get(topic), "topic-tag", () => {
+        state.topic = state.topic === topic ? "all" : topic;
+        applyFilters();
+        get("topic-select").focus();
+      });
+      tag.title = `按${topicNames.get(topic)}筛选`;
+      tag.setAttribute("aria-pressed", String(state.topic === topic));
+      tags.append(tag);
+    }
+    body.append(tags);
+  }
+  body.append(element("p", "prompt", question.prompt));
   if (question.images?.length) renderFigures(body, question.images);
   if (question.note) body.append(element("p", "note", question.note));
 
@@ -377,7 +487,10 @@ function renderReference(target, question) {
   if (question.model) target.append(element("p", "reference-copy", question.model));
   if (question.explanation) target.append(element("p", "reference-copy", question.explanation));
   const source = question.answerSource ?? question.paper.answerSource;
-  if (source) target.append(link("查看随卷参考答案 ↗", source, question.answerPage));
+  if (source) {
+    const label = question.paper.kind === "homework" ? "查看作业原解 ↗" : "查看随卷参考答案 ↗";
+    target.append(link(label, source, question.answerPage));
+  }
 }
 
 function recordOutcome(question, input, outcome) {
@@ -419,7 +532,7 @@ function renderIndex(matching) {
     const search = element("input");
     search.type = "text";
     search.id = "index-search";
-    search.placeholder = "搜索题名、年份或题号";
+    search.placeholder = "搜索题名、来源、题号或知识点";
     search.setAttribute("aria-label", search.placeholder);
     const list = element("div", "index-list");
     list.id = "index-list";
@@ -429,9 +542,11 @@ function renderIndex(matching) {
   const query = get("index-search").value.toLowerCase().trim();
   const list = get("index-list");
   list.replaceChildren();
-  const results = matching.filter(question =>
-    `${question.title} ${question.paper.label} ${question.ref}`.toLowerCase().includes(query)
-  );
+  const results = matching.filter(question => {
+    const topics = question.topics.map(id => topicNames.get(id)).join(" ");
+    const searchText = `${question.title} ${question.paper.label} ${question.ref} ${topics}`;
+    return searchText.toLowerCase().includes(query);
+  });
   for (const question of results) {
     const row = button("", "index-row", () => {
       toggleIndex(false);
@@ -440,7 +555,7 @@ function renderIndex(matching) {
     if (question.id === activeId) row.setAttribute("aria-current", "true");
     const status = state.records[question.id]?.status ?? "new";
     row.append(
-      element("span", "", `${question.paper.id} · ${question.ref}`),
+      element("span", "index-source", `${question.paper.label} · ${question.ref}`),
       element("strong", "", question.title),
       element("small", "", statusNames[status])
     );
@@ -466,9 +581,6 @@ get("toggle-index").addEventListener("click", () => toggleIndex(get("question-in
 for (const filter of document.querySelectorAll("[data-filter]")) {
   filter.addEventListener("click", () => {
     state.filter = filter.dataset.filter;
-    clearIndexSearch();
-    const matching = matchingQuestions();
-    const current = matching.find(question => question.id === activeId);
-    selectQuestion(current?.id ?? matching[0]?.id);
+    applyFilters();
   });
 }

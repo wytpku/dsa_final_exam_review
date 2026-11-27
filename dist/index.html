@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="按试卷练习数据结构与算法期末真题，保存你的练习进度。">
+  <meta name="description" content="按知识点练习数据结构与算法期末真题和书面作业，保存你的练习进度。">
   <meta name="theme-color" content="#163f36">
   <title>DSA 期末刷题</title>
   <link rel="icon" href="data:,">
@@ -13,6 +13,14 @@
   <script src="data-middle.js" defer></script>
   <script src="data-old.js" defer></script>
   <script src="data-extra.js" defer></script>
+  <script src="data-homework-early.js" defer></script>
+  <script src="data-homework-middle.js" defer></script>
+  <script src="data-homework-late.js" defer></script>
+  <script src="data-homework-archive-early.js" defer></script>
+  <script src="data-homework-archive-middle.js" defer></script>
+  <script src="data-homework-archive-late.js" defer></script>
+  <script src="topics.js" defer></script>
+  <script src="data-exam-topics.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -26,7 +34,7 @@
     <section class="intro" aria-labelledby="page-title">
       <div class="intro-copy">
         <h1 id="page-title">DSA 期末刷题</h1>
-        <p id="bank-size">历年期末笔试真题</p>
+        <p id="bank-size">期末真题与书面作业</p>
       </div>
       <div class="progress-box">
         <div class="progress-heading"><label for="progress">全题库进度</label><strong id="progress-text">0 / 0</strong></div>
@@ -37,8 +45,11 @@
     <div class="layout">
       <aside class="sidebar">
         <details id="paper-panel" open>
-          <summary>试卷 <span id="paper-selection"></span></summary>
-          <nav id="paper-list" aria-label="试卷"></nav>
+          <summary>题目来源 <span id="paper-selection"></span></summary>
+          <div id="source-scopes" role="group" aria-label="题库范围"></div>
+          <label class="source-field" for="source-select">试卷或作业章节
+            <select id="source-select"></select>
+          </label>
         </details>
       </aside>
       <section class="workspace" aria-label="练习区">
@@ -52,6 +63,12 @@
           <div class="browse">
             <button type="button" class="text-button" id="toggle-index" aria-expanded="false" aria-controls="question-index">题目列表 <span aria-hidden="true">▤</span></button>
           </div>
+        </div>
+        <div class="topicbar">
+          <label for="topic-select">知识点
+            <select id="topic-select"></select>
+          </label>
+          <span id="match-count"></span>
         </div>
         <div id="question-index" class="question-index" hidden></div>
         <article class="question" id="question">
